@@ -6,8 +6,8 @@ entrypoint: "entry:build_policy"
 artifact_dir: "artifacts"
 checkpoint_manifest:
   - path: "artifacts/README.txt"
-    sha256: "629ec81e08544aa5a34e0b7686e064295c18c01b51ceba3dfda471b1311f0c11"
-    size_bytes: 334
+    sha256: "8cd5789407918da575fe107eade3f851916b7c989ca278c7bbacce524334c725"
+    size_bytes: 349
 inference_lock: "requirements-infer.lock"
 method_type: "rule"
 training_config_paths: []
