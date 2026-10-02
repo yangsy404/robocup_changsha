@@ -2,3 +2,9 @@ experiment_id,description
 E001,fixed assignment + deadbeat control -> public score 208.33
 E002,greedy nearest assignment + tracking -> public score 208.33
 E003,tuned KP=3.0 V_MAX=0.5 LEAD=3.0 -> public score 225.0 (coop-0 0.333 -> 1.0)
+E004,robustness sweep 6 seeds -> scores 0..250 (layout-dominated); search-fallback tried & reverted, no effect
+E005,global min-cost assignment (vs greedy) -> 6-seed Pareto better (orig 225 unchanged; v1 208.33->216.67; v3 191.67->200.00; mean 168.06->170.83; no regression)
+E006,PD relative-velocity damping KV=1.0 -> regression (orig 225->208.33; v4 250->208.33; mean 168.06->152.78), rejected
+E007,LEAD_STEPS sweep 2.0-4.0 -> 2.5 Pareto best (v1 216.67->225; mean 170.83->172.22; no regression), adopted
+E008,KV velocity-feedforward sweep 0.1-0.4 -> zero effect (lead already saturates under V_MAX), removed
+E009,AVOID_GAIN=0 ablation -> collisions 0.10 + 3 seeds regress (mean 170.83->166.94); avoidance is active, keep 0.6

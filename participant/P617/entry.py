@@ -8,6 +8,7 @@
 
 不加载任何模型文件，纯 NumPy，符合评测环境（无 PyTorch）要求。
 """
+import itertools
 import numpy as np
 
 
@@ -17,7 +18,7 @@ class RulePolicy:
     # ---- 可调参数 ----
     KP = 3.0          # 速度环比例增益：期望速度 = KP * 位置误差
     V_MAX = 0.5      # 期望速度上限（略高于物理稳态 0.4，让死区控制在贴住目标前才减速）
-    LEAD_STEPS = 3.0  # 提前量：预测目标 LEAD_STEPS 步之后的位置
+    LEAD_STEPS = 2.5  # 提前量：预测目标 LEAD_STEPS 步之后的位置（扫描 2.0~4.0 后取 2.5，见 LOG）
     AVOID_RADIUS = 0.3  # 队友进入该距离开始避撞
     AVOID_GAIN = 0.6    # 避撞排斥强度（速度空间）
 
@@ -88,8 +89,8 @@ class RulePolicy:
                 self._peer_abs[i] = self_pos + peers[i][:2]
                 self._peer_seen[i] = True
 
-        # 4) 贪心分配：机器人按编号顺序认领最近的未分配目标
-        tj = self._greedy_assignment(self_pos, step, target_visible)
+        # 4) 全局最小代价分配：所有已知机器人×已知目标做二分匹配
+        tj = self._global_assignment(self_pos, step, target_visible)
 
         # 5) 确定追踪点（含提前量）
         target_point = self._target_point(tj, step, target_visible, self_pos)
@@ -133,8 +134,9 @@ class RulePolicy:
                 known[j] = True
         return known_pos, known
 
-    def _greedy_assignment(self, self_pos, step, target_visible):
-        """确定性贪心分配：机器人按编号顺序，各自认领最近的未分配目标。"""
+    def _global_assignment(self, self_pos, step, target_visible):
+        """全局最小代价匹配：所有已知机器人×已知目标做二分匹配（枚举排列），
+        返回本机器人分到的目标编号。理论上不差于贪心。"""
         N = self._num_agents
         M = self._num_targets
         known_pos, known = self._known_target_positions(step, target_visible)
@@ -149,34 +151,57 @@ class RulePolicy:
                 robot_pos[i] = self._peer_abs[i]
                 robot_known[i] = True
 
-        taken = [False] * M
-        my_target = None
-        for i in range(N):
-            if not robot_known[i]:
-                continue
-            best = None
-            best_d = 1e18
-            for j in range(M):
-                if known[j] and not taken[j]:
-                    d = float(np.linalg.norm(known_pos[j] - robot_pos[i]))
-                    if d < best_d:
-                        best_d = d
-                        best = j
-            if best is not None:
-                taken[best] = True
-                if i == self._agent_index:
-                    my_target = best
+        r_idx = [i for i in range(N) if robot_known[i]]
+        t_idx = [j for j in range(M) if known[j]]
+        R = len(r_idx)
+        T = len(t_idx)
+        if R == 0 or T == 0:
+            return None
 
-        # 兜底：若分配失败（例如一个目标都没见过），追踪最近已知目标
-        if my_target is None:
-            best_d = 1e18
-            for j in range(M):
-                if known[j]:
-                    d = float(np.linalg.norm(known_pos[j] - self_pos))
-                    if d < best_d:
-                        best_d = d
-                        my_target = j
-        return my_target
+        cost = np.zeros((R, T), dtype=np.float64)
+        for a in range(R):
+            for b in range(T):
+                cost[a, b] = float(np.linalg.norm(known_pos[t_idx[b]] - robot_pos[r_idx[a]]))
+
+        # 每行/每列至多用一次，规模 min(R,T)；枚举排列，取字典序最小的最优解保证确定性
+        if R <= T:
+            best = None
+            best_perm = None
+            for perm in itertools.permutations(range(T), R):
+                c = sum(cost[a, perm[a]] for a in range(R))
+                if best is None or c < best:
+                    best = c
+                    best_perm = perm
+            assign_row = list(best_perm)
+        else:
+            best = None
+            best_perm = None
+            for perm in itertools.permutations(range(R), T):
+                c = sum(cost[perm[b], b] for b in range(T))
+                if best is None or c < best:
+                    best = c
+                    best_perm = perm
+            assign_row = [None] * R
+            for b in range(T):
+                assign_row[best_perm[b]] = b
+
+        for a in range(R):
+            if r_idx[a] == self._agent_index:
+                t = assign_row[a]
+                if t is not None:
+                    return t_idx[t]
+                break
+
+        # 兜底：本机器人未被分配，追踪最近已知目标
+        best_d = 1e18
+        fallback = None
+        for j in range(M):
+            if known[j]:
+                d = float(np.linalg.norm(known_pos[j] - self_pos))
+                if d < best_d:
+                    best_d = d
+                    fallback = j
+        return fallback
 
     def _target_point(self, tj, step, target_visible, self_pos):
         """被分配目标的预测位置（含提前量），用于朝它前进。"""
