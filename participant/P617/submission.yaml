@@ -13,4 +13,4 @@ method_type: "rule"
 training_config_paths: []
 report_path: "REPORT.md"
 metadata:
-  description: "规则策略：贪心目标分配 + 目标追踪（速度估计 + 提前量）+ 避撞，纯 NumPy 无模型"
+  description: "规则策略：全局最小代价一对一分配 + 目标追踪（速度估计 + 提前量）+ 避撞，纯 NumPy 无模型"

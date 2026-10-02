@@ -1,8 +1,8 @@
-"""P617 规则策略：贪心目标分配 + 目标追踪（速度估计 + 提前量拦截）+ 避撞。
+"""P617 规则策略：全局最小代价一对一目标分配 + 目标追踪（速度估计 + 提前量拦截）+ 避撞。
 
 设计要点（参数与推导见代码注释）：
-1. 分工：所有机器人用同一套确定性贪心算法（按编号顺序，各认领最近的未分配目标），
-   保证覆盖不重复，同时避免"机器人 i 被派到离自己很远的固定目标"的几何浪费。
+1. 分工：所有已知机器人×已知目标做全局最小代价一对一匹配（枚举可行排列、取总代价
+   最小者），保证覆盖不重复，同时避免"机器人 i 被派到离自己很远的固定目标"的几何浪费。
 2. 追踪：用绝对位置重建目标的真实速度，预测若干步后的位置，朝预测点走。
 3. 控制：把"期望速度"经一步死区控制换算成驱动力（动作），并加避撞排斥。
 
@@ -50,7 +50,7 @@ class RulePolicy:
         self._target_visible_prev = np.zeros(M, dtype=bool)
         self._target_last_seen_step = np.full(M, -1, dtype=np.int64)
 
-        # 队友状态：绝对位置（用于贪心分配）
+        # 队友状态：绝对位置（用于全局分配）
         self._peer_abs = np.zeros((context.num_agents, 2), dtype=np.float64)
         self._peer_seen = np.zeros(context.num_agents, dtype=bool)
         self._prev_step = None
@@ -136,7 +136,7 @@ class RulePolicy:
 
     def _global_assignment(self, self_pos, step, target_visible):
         """全局最小代价匹配：所有已知机器人×已知目标做二分匹配（枚举排列），
-        返回本机器人分到的目标编号。理论上不差于贪心。"""
+        返回本机器人分到的目标编号（全局最小代价匹配）。"""
         N = self._num_agents
         M = self._num_targets
         known_pos, known = self._known_target_positions(step, target_visible)
